@@ -337,3 +337,225 @@
 
   loop();
 })();
+
+(() => {
+  const bossState = {
+    telegraph: null,
+    lastPhase: 0
+  };
+
+  const ensureBossOverlay = () => {
+    let el = document.getElementById('boss-warning');
+    if (el) return el;
+
+    el = document.createElement('div');
+    el.id = 'boss-warning';
+    el.style.position = 'fixed';
+    el.style.inset = '0';
+    el.style.pointerEvents = 'none';
+    el.style.display = 'flex';
+    el.style.alignItems = 'center';
+    el.style.justifyContent = 'center';
+    el.style.zIndex = '42';
+    el.style.opacity = '0';
+    el.style.transition = 'opacity 180ms ease';
+    el.style.fontSize = 'clamp(20px, 4vw, 42px)';
+    el.style.fontWeight = '700';
+    el.style.color = '#fef3c7';
+    el.style.textShadow = '0 0 18px rgba(255,140,0,0.52), 0 0 36px rgba(255,60,0,0.24)';
+    el.style.letterSpacing = '0.08em';
+    el.style.textTransform = 'uppercase';
+    document.body.appendChild(el);
+    return el;
+  };
+
+  const showBossWarning = (text) => {
+    const el = ensureBossOverlay();
+    el.textContent = text;
+    el.style.opacity = '1';
+    setTimeout(() => {
+      el.style.opacity = '0';
+    }, 900);
+  };
+
+  const updateBossTelegraph = () => {
+    const game = window.__game;
+    const boss = game && game.boss ? game.boss : null;
+
+    if (!boss || !boss.hp || !boss.max) return;
+
+    const phase = boss.hp < boss.max * 0.66 ? 2 : 1;
+    const phase2 = boss.hp < boss.max * 0.33 ? 3 : phase;
+
+    if (phase2 !== bossState.lastPhase) {
+      bossState.lastPhase = phase2;
+
+      if (phase2 === 1) showBossWarning('Rage phase');
+      if (phase2 === 2) showBossWarning('Overdrive');
+      if (phase2 === 3) showBossWarning('Final form');
+    }
+
+    if (!boss.telegraph || boss.telegraph <= 0) {
+      const roll = Math.random();
+      if (roll < 0.015) {
+        boss.telegraph = 1.4;
+        showBossWarning('Charge!');
+      }
+    } else {
+      boss.telegraph -= 0.016;
+    }
+  };
+
+  const bossLoop = () => {
+    updateBossTelegraph();
+    requestAnimationFrame(bossLoop);
+  };
+
+  bossLoop();
+})();
+
+(() => {
+  const audioState = {
+    enabled: true,
+    ambient: null,
+    music: null,
+    started: false,
+    ctx: null
+  };
+
+  const ensureAudioContext = () => {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return null;
+    if (!audioState.ctx) {
+      audioState.ctx = new AudioCtx();
+    }
+    if (audioState.ctx.state === 'suspended') {
+      audioState.ctx.resume();
+    }
+    return audioState.ctx;
+  };
+
+  const createNoise = (ctx, gainValue = 0.012) => {
+    const bufferSize = 2 * ctx.sampleRate;
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const output = buffer.getChannelData(0);
+
+    for (let i = 0; i < bufferSize; i++) {
+      output[i] = (Math.random() * 2 - 1) * 0.55;
+    }
+
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+
+    const gain = ctx.createGain();
+    gain.gain.value = gainValue;
+
+    source.connect(gain);
+    gain.connect(ctx.destination);
+
+    source.start();
+
+    return { source, gain };
+  };
+
+  const createTone = (ctx, freq = 52, gainValue = 0.018, type = 'sawtooth') => {
+    const osc = ctx.createOscillator();
+    osc.type = type;
+    osc.frequency.value = freq;
+
+    const gain = ctx.createGain();
+    gain.gain.value = gainValue;
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start();
+
+    return { osc, gain };
+  };
+
+  const initAudio = () => {
+    if (audioState.started) return;
+    const ctx = ensureAudioContext();
+    if (!ctx) return;
+
+    audioState.ambient = createNoise(ctx, 0.008);
+    audioState.music = createTone(ctx, 48, 0.015, 'sawtooth');
+
+    audioState.started = true;
+  };
+
+  const playShot = (gainLevel = 0.08, pitch = 1) => {
+    if (!audioState.enabled) return;
+
+    const ctx = ensureAudioContext();
+    if (!ctx) return;
+
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.value = 90 * pitch;
+
+    const gain = ctx.createGain();
+    gain.gain.value = 0.12;
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start();
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.12);
+    osc.stop(ctx.currentTime + 0.12);
+  };
+
+  const playHit = () => {
+    if (!audioState.enabled) return;
+    const ctx = ensureAudioContext();
+    if (!ctx) return;
+
+    const osc = ctx.createOscillator();
+    osc.type = 'square';
+    osc.frequency.value = 42;
+
+    const gain = ctx.createGain();
+    gain.gain.value = 0.18;
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start();
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.08);
+    osc.stop(ctx.currentTime + 0.08);
+  };
+
+  const playDash = () => {
+    if (!audioState.enabled) return;
+    const ctx = ensureAudioContext();
+    if (!ctx) return;
+
+    const osc = ctx.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.value = 140;
+
+    const gain = ctx.createGain();
+    gain.gain.value = 0.06;
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start();
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.1);
+    osc.stop(ctx.currentTime + 0.1);
+  };
+
+  window.__audio = {
+    init: initAudio,
+    shot: playShot,
+    hit: playHit,
+    dash: playDash,
+    enable: () => { audioState.enabled = true; },
+    disable: () => { audioState.enabled = false; }
+  };
+
+  document.addEventListener('pointerdown', initAudio, { once: true });
+  document.addEventListener('keydown', initAudio, { once: true });
+})();
