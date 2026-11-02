@@ -13,19 +13,22 @@ const upgradeConfig = {
 };
 
 (function () {
-  let ready = false;
-  let animationFrameId = null;
+  const state = { ready: false, ghosts: [], lastGhost: 0 };
 
   function getGame() {
     return window.__game || null;
   }
 
-  function setWeapon(index) {
+  function getPlayer() {
     const game = getGame();
-    if (!game || !game.P) return;
+    return game && game.P ? game.P : null;
+  }
+
+  function setWeapon(index) {
+    const P = getPlayer();
+    if (!P) return;
 
     const weaponIndex = ((index % upgradeConfig.weapons.length) + upgradeConfig.weapons.length) % upgradeConfig.weapons.length;
-    const P = game.P;
     P.wep = weaponIndex;
     P.ammo = P.ammo || [30, 90, 12, 40];
     P.ammo[weaponIndex] = Math.max(0, P.ammo[weaponIndex] || 0);
@@ -43,9 +46,8 @@ const upgradeConfig = {
   }
 
   function updateHud() {
-    const game = getGame();
-    if (!game || !game.P) return;
-    const P = game.P;
+    const P = getPlayer();
+    if (!P) return;
 
     const weaponLabel = document.getElementById('wname');
     const ammoLabel = document.getElementById('ammo');
@@ -56,8 +58,75 @@ const upgradeConfig = {
     }
   }
 
+  function triggerDash() {
+    const P = getPlayer();
+    if (!P || P.dashCd > 0) return;
+
+    P.dashT = 0.16;
+    P.dashCd = 0.6;
+    P.inv = Math.max(P.inv, 0.2);
+    P.vx = P.face * 720;
+    P.vy = 0;
+    if (P.c) P.c.alpha = 0.8;
+  }
+
+  function addAfterimage() {
+    const P = getPlayer();
+    if (!P || !P.c || P.dashT <= 0) return;
+
+    const now = performance.now();
+    if (now - state.lastGhost < 36) return;
+    state.lastGhost = now;
+
+    const ghost = P.c.clone({ children: true });
+    ghost.alpha = 0.2;
+    ghost.scale.x = P.face * (0.9 + (P.dashT * 2));
+    ghost.scale.y = 0.9 + (P.dashT * 2);
+
+    if (P.c.parent) {
+      P.c.parent.addChild(ghost);
+    }
+
+    state.ghosts.push({ sprite: ghost, life: 0.22 });
+  }
+
+  function updateGhosts() {
+    for (let i = state.ghosts.length - 1; i >= 0; i--) {
+      const item = state.ghosts[i];
+      item.life -= 0.016;
+      item.sprite.alpha *= 0.8;
+      if (item.life <= 0) {
+        if (item.sprite.parent) item.sprite.parent.removeChild(item.sprite);
+        state.ghosts.splice(i, 1);
+      }
+    }
+  }
+
+  function doParry() {
+    const P = getPlayer();
+    if (!P) return;
+
+    const game = getGame();
+    const enemies = Array.isArray(game?.enemies) ? game.enemies : [];
+    for (const enemy of enemies) {
+      if (!enemy || enemy.dead) continue;
+      const dx = Math.abs(P.x - enemy.x);
+      const dy = Math.abs(P.y - enemy.y);
+      if (dx < 70 && dy < 70) {
+        enemy.stagger = 3;
+        enemy.flash = 1;
+        enemy.hp = Math.max(0, enemy.hp - 20);
+        if (enemy.hp <= 0) {
+          enemy.dead = true;
+          if (enemy.c && enemy.c.destroy) enemy.c.destroy({ children: true });
+        }
+      }
+    }
+  }
+
   function applyStagger(enemy) {
     if (!enemy || enemy.dead) return;
+
     enemy.maxHp = enemy.maxHp || enemy.hp || upgradeConfig.enemyBaseHp[enemy.type] || 60;
     enemy.stagger = enemy.stagger || 0;
 
@@ -77,20 +146,26 @@ const upgradeConfig = {
       enemy.c.alpha = 1;
     }
 
-    const game = getGame();
-    const P = game?.P;
+    const P = getPlayer();
     if (!P || !P.dashT || enemy.stagger <= 0) return;
 
     const distanceX = Math.abs(P.x - enemy.x);
     const distanceY = Math.abs(P.y - enemy.y);
     if (distanceX < 80 && distanceY < 80) {
       enemy.dead = true;
-      enemy.c.visible = false;
-      if (enemy.c && enemy.c.destroy) enemy.c.destroy({ children: true });
+      if (enemy.c) {
+        enemy.c.visible = false;
+        if (enemy.c.destroy) enemy.c.destroy({ children: true });
+      }
+
       const scoreNode = document.getElementById('score');
       const currentScore = Number((scoreNode?.textContent || '0').replace(/[^\d]/g, '')) || 0;
       if (scoreNode) scoreNode.textContent = (currentScore + 400).toLocaleString('sk');
-      if (P.hp < 100) P.hp = Math.min(100, P.hp + 25);
+
+      if (P.hp < 100) {
+        P.hp = Math.min(100, P.hp + 25);
+      }
+
       const hpLabel = document.getElementById('hpn');
       const hpBar = document.getElementById('hpb');
       if (hpLabel) hpLabel.textContent = String(Math.ceil(P.hp));
@@ -109,17 +184,20 @@ const upgradeConfig = {
 
   function tickUpgrade() {
     const game = getGame();
-    if (!game) return;
+    const P = getPlayer();
+    if (!P || !game) return;
 
+    if (P.dashT > 0) {
+      addAfterimage();
+    }
+
+    updateGhosts();
     updateHud();
 
     const enemies = Array.isArray(game.enemies) ? game.enemies : [];
     enemies.forEach(applyStagger);
 
-    const P = game.P;
-    if (P && P.wep == null) {
-      P.wep = 0;
-    }
+    if (P.wep == null) P.wep = 0;
   }
 
   function bindControls() {
@@ -132,6 +210,8 @@ const upgradeConfig = {
       if (event.code === 'Digit3') setWeapon(2);
       if (event.code === 'Digit4') setWeapon(3);
       if (event.code === 'KeyQ') setWeapon((game.P?.wep ?? 0) + 1);
+      if (event.code === 'ShiftLeft' || event.code === 'ShiftRight') triggerDash();
+      if (event.code === 'KeyE') doParry();
     });
 
     const startTitle = document.querySelector('#start h1');
@@ -140,16 +220,17 @@ const upgradeConfig = {
     if (startText) startText.textContent = 'Vyraž si cestu cez bránu pevnosti, krv a oheň, pričom každý dash, stagger a glory kill ti dáva novú šancu prežiť.';
   }
 
-  function startUpgradeLoop() {
+  function startLoop() {
     const game = getGame();
-    if (!game || !game.P) {
-      animationFrameId = requestAnimationFrame(startUpgradeLoop);
+    const P = getPlayer();
+
+    if (!game || !P) {
+      requestAnimationFrame(startLoop);
       return;
     }
 
-    if (!ready) {
-      ready = true;
-      const P = game.P;
+    if (!state.ready) {
+      state.ready = true;
       P.ammo = P.ammo || [30, 90, 12, 40];
       bindControls();
       setWeapon(0);
@@ -157,19 +238,8 @@ const upgradeConfig = {
     }
 
     tickUpgrade();
-    animationFrameId = requestAnimationFrame(startUpgradeLoop);
+    requestAnimationFrame(startLoop);
   }
 
-  if (window.__game) {
-    startUpgradeLoop();
-  } else {
-    const poll = () => {
-      if (window.__game) {
-        startUpgradeLoop();
-      } else {
-        requestAnimationFrame(poll);
-      }
-    };
-    poll();
-  }
+  startLoop();
 })();
