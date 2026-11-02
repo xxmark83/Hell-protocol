@@ -1,0 +1,74 @@
+body {
+  background:
+    radial-gradient(circle at 20% 10%, rgba(89, 30, 12, 0.35), transparent 28%),
+    radial-gradient(circle at 80% 18%, rgba(90, 52, 19, 0.2), transparent 26%),
+    linear-gradient(180deg, #090907 0%, #120d0a 42%, #070606 100%);
+}
+
+#msg {
+  text-shadow: 0 0 18px rgba(255,120,40,0.5), 0 0 30px rgba(255,70,0,0.2);
+}
+
+#hud .lab {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+#hud .num {
+  text-shadow: 0 0 14px rgba(255,170,80,0.35);
+}
+
+#hpb {
+  background: linear-gradient(90deg, #ef4444 0%, #ff7a18 55%, #facc15 100%);
+  box-shadow: 0 0 18px rgba(255,90,30,0.45);
+}
+
+#ammo {
+  min-width: 54px;
+  display: inline-block;
+  text-align: center;
+}
+
+#brutal-vfx {
+  mix-blend-mode: screen;
+}
+
+canvas {
+  filter: saturate(1.1) contrast(1.08);
+}
+
+#start .box,
+#end .box {
+  background: rgba(18, 12, 10, 0.9);
+  border: 1px solid rgba(255, 125, 60, 0.2);
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.04),
+    0 18px 42px rgba(0,0,0,0.55),
+    inset 0 0 18px rgba(255,110,40,0.04);
+  padding: 24px 22px;
+}
+
+button.go {
+  box-shadow: 0 8px 24px rgba(194,65,12,0.4);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+button.go:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 28px rgba(234,88,12,0.5);
+}
+
+.qb {
+  transition: all 0.12s ease;
+}
+.qb:hover {
+  border-color: rgba(255, 170, 90, 0.5);
+  box-shadow: 0 0 0 1px rgba(255,170,90,0.06);
+}
+.qb.sel {
+  background: linear-gradient(180deg, #fef3c7 0%, #facc15 100%);
+  color: #1f140f;
+  border-color: rgba(250, 204, 21, 0.6);
+  box-shadow: 0 0 18px rgba(250, 204, 21, 0.16);
+}
