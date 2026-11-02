@@ -823,3 +823,311 @@ const upgradeConfig = {
     requestAnimationFrame(frame);
   });
 })();
+
+(() => {
+  const ensureCinematicLayer = () => {
+    let layer = document.getElementById('cinematic-layer');
+    if (layer) return layer;
+
+    layer = document.createElement('div');
+    layer.id = 'cinematic-layer';
+    layer.style.position = 'fixed';
+    layer.style.inset = '0';
+    layer.style.pointerEvents = 'none';
+    layer.style.zIndex = '22';
+    layer.style.opacity = '0';
+    layer.style.transition = 'opacity 240ms ease';
+    layer.style.background = 'radial-gradient(circle at center, rgba(255,140,80,0.08), rgba(0,0,0,0.1) 55%, rgba(0,0,0,0.62) 100%)';
+    document.body.appendChild(layer);
+    return layer;
+  };
+
+  const triggerCinematicBeat = (label = 'Sanctum trembles') => {
+    const layer = ensureCinematicLayer();
+    layer.textContent = label;
+    layer.style.opacity = '1';
+    layer.style.color = 'rgba(255,210,160,0.82)';
+    layer.style.fontSize = 'clamp(18px, 3vw, 40px)';
+    layer.style.fontWeight = '700';
+    layer.style.letterSpacing = '0.12em';
+    layer.style.textTransform = 'uppercase';
+    layer.style.display = 'flex';
+    layer.style.alignItems = 'center';
+    layer.style.justifyContent = 'center';
+    layer.style.textShadow = '0 0 18px rgba(255,120,30,0.5)';
+    setTimeout(() => {
+      layer.style.opacity = '0';
+    }, 700);
+  };
+
+  const applyEnemyArtPass = () => {
+    const game = window.__game;
+    if (!game || !Array.isArray(game.enemies)) return;
+
+    const time = performance.now();
+    game.enemies.forEach((enemy) => {
+      if (!enemy || !enemy.c) return;
+      const phase = enemy.hp / Math.max(1, enemy.maxHp || enemy.hp || 60);
+
+      enemy.c.tint = phase < 0.25 ? 0xffa057 : (enemy.type === 'brute' ? 0xff8855 : 0xffd6a5);
+      enemy.c.alpha = 0.7 + Math.sin(time * 0.02 + enemy.x) * 0.18;
+      enemy.c.scale.x = 1 + Math.sin(time * 0.012 + enemy.y) * 0.08;
+      enemy.c.scale.y = 1 + Math.cos(time * 0.012 + enemy.x) * 0.08;
+    });
+  };
+
+  const ensureArenaPulse = () => {
+    let pulse = document.getElementById('arena-pulse');
+    if (pulse) return pulse;
+
+    pulse = document.createElement('div');
+    pulse.id = 'arena-pulse';
+    pulse.style.position = 'fixed';
+    pulse.style.inset = '0';
+    pulse.style.pointerEvents = 'none';
+    pulse.style.zIndex = '10';
+    pulse.style.opacity = '0';
+    pulse.style.background = 'radial-gradient(circle at center, rgba(255, 130, 50, 0.06), transparent 58%)';
+    pulse.style.transition = 'opacity 220ms ease';
+    document.body.appendChild(pulse);
+    return pulse;
+  };
+
+  const pulseArena = () => {
+    const pulse = ensureArenaPulse();
+    pulse.style.opacity = '1';
+    setTimeout(() => {
+      pulse.style.opacity = '0';
+    }, 180);
+  };
+
+  const finalArtLoop = () => {
+    applyEnemyArtPass();
+
+    const boss = window.__game?.boss;
+    if (boss && boss.hp && boss.max) {
+      const phase = boss.hp / boss.max;
+      const pulse = ensureArenaPulse();
+      pulse.style.opacity = String(Math.max(0, 0.22 - phase * 0.12));
+      pulse.style.background = `radial-gradient(circle at center, rgba(255, 120, 50, ${0.12 + (1 - phase) * 0.18}), transparent 58%)`;
+    }
+
+    requestAnimationFrame(finalArtLoop);
+  };
+
+  finalArtLoop();
+})();
+
+(() => {
+  const audioExt = window.__audio || {};
+  const ensureFinalAudioContext = () => {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    const ctx = audioExt._ctx || (AudioCtx ? new AudioCtx() : null);
+    if (!ctx) return null;
+    audioExt._ctx = ctx;
+    if (ctx.state === 'suspended') ctx.resume();
+    return ctx;
+  };
+
+  const playNoiseBurst = (frequency = 160, duration = 0.25, gainAmount = 0.08) => {
+    const ctx = ensureFinalAudioContext();
+    if (!ctx) return;
+
+    const osc = ctx.createOscillator();
+    const filter = ctx.createBiquadFilter();
+    const gain = ctx.createGain();
+
+    osc.type = 'sawtooth';
+    osc.frequency.value = frequency;
+    filter.type = 'lowpass';
+    filter.frequency.value = 1800;
+    gain.gain.value = gainAmount;
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start();
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
+    osc.stop(ctx.currentTime + duration);
+  };
+
+  const playBossPhaseShift = () => {
+    playNoiseBurst(120, 0.42, 0.09);
+    setTimeout(() => playNoiseBurst(80, 0.3, 0.08), 80);
+  };
+
+  const playArenaTransition = () => {
+    playNoiseBurst(210, 0.18, 0.05);
+    setTimeout(() => playNoiseBurst(140, 0.28, 0.07), 100);
+  };
+
+  const playEnemyDeathVariant = () => {
+    playNoiseBurst(80, 0.22, 0.06);
+    setTimeout(() => playNoiseBurst(40, 0.18, 0.05), 60);
+  };
+
+  window.__audio = {
+    ...audioExt,
+    finalNoiseBurst: playNoiseBurst,
+    bossPhaseShift: playBossPhaseShift,
+    arenaTransition: playArenaTransition,
+    enemyDeathVariant: playEnemyDeathVariant,
+  };
+})();
+
+(() => {
+  const bossAttackState = {
+    nextAttackAt: 0,
+    attackIndex: 0,
+  };
+
+  const chooseBossAttack = () => {
+    const options = ['slash', 'shockwave', 'orbBurst', 'groundCrack'];
+    const boss = window.__game?.boss;
+    if (!boss) return 'slash';
+
+    const phase = boss.hp / Math.max(1, boss.max);
+    if (phase < 0.35) return options[(bossAttackState.attackIndex + 2) % options.length];
+    if (phase < 0.7) return options[(bossAttackState.attackIndex + 1) % options.length];
+    return options[bossAttackState.attackIndex % options.length];
+  };
+
+  const applyBossAttack = () => {
+    const boss = window.__game?.boss;
+    const player = window.__game?.P;
+    if (!boss || !player) return;
+
+    const attack = chooseBossAttack();
+    bossAttackState.attackIndex++;
+
+    const msg = {
+      slash: 'Boss cleave',
+      shockwave: 'Gravity pulse',
+      orbBurst: 'Soul burst',
+      groundCrack: 'Abyss split',
+    }[attack];
+
+    if (window.__audio?.bossPhaseShift) window.__audio.bossPhaseShift();
+
+    const ctx = document.querySelector('canvas');
+    if (ctx) {
+      ctx.style.transform = 'translate3d(0,0,0) scale(1.01)';
+      setTimeout(() => {
+        ctx.style.transform = '';
+      }, 180);
+    }
+
+    if (attack === 'slash') {
+      const line = document.createElement('div');
+      line.style.position = 'fixed';
+      line.style.left = '50%';
+      line.style.top = '50%';
+      line.style.width = '12vw';
+      line.style.height = '3px';
+      line.style.background = 'linear-gradient(90deg, transparent, rgba(255,140,60,0.9), transparent)';
+      line.style.transform = 'translate(-50%, -50%) rotate(-18deg)';
+      line.style.opacity = '0.8';
+      line.style.zIndex = '18';
+      line.style.pointerEvents = 'none';
+      document.body.appendChild(line);
+
+      setTimeout(() => {
+        line.style.opacity = '0';
+        setTimeout(() => line.remove(), 180);
+      }, 140);
+    }
+
+    if (attack === 'shockwave') {
+      const ring = document.createElement('div');
+      ring.style.position = 'fixed';
+      ring.style.left = '50%';
+      ring.style.top = '50%';
+      ring.style.width = '120px';
+      ring.style.height = '120px';
+      ring.style.borderRadius = '50%';
+      ring.style.border = '2px solid rgba(255,165,80,0.8)';
+      ring.style.transform = 'translate(-50%, -50%)';
+      ring.style.opacity = '0.9';
+      ring.style.zIndex = '18';
+      ring.style.pointerEvents = 'none';
+      document.body.appendChild(ring);
+
+      setTimeout(() => {
+        ring.style.transition = 'transform 420ms ease-out, opacity 420ms ease-out';
+        ring.style.transform = 'translate(-50%, -50%) scale(3.5)';
+        ring.style.opacity = '0';
+        setTimeout(() => ring.remove(), 420);
+      }, 20);
+    }
+
+    if (attack === 'orbBurst') {
+      const orb = document.createElement('div');
+      orb.style.position = 'fixed';
+      orb.style.left = '50%';
+      orb.style.top = '50%';
+      orb.style.width = '36px';
+      orb.style.height = '36px';
+      orb.style.borderRadius = '50%';
+      orb.style.background = 'radial-gradient(circle, rgba(255,210,160,0.9), rgba(255,115,60,0.8), rgba(96,20,0,0.4))';
+      orb.style.boxShadow = '0 0 32px rgba(255,120,60,0.7)';
+      orb.style.transform = 'translate(-50%, -50%)';
+      orb.style.zIndex = '18';
+      orb.style.pointerEvents = 'none';
+      document.body.appendChild(orb);
+
+      setTimeout(() => {
+        orb.style.transition = 'transform 520ms ease-out, opacity 520ms ease-out';
+        orb.style.transform = 'translate(-50%, -50%) scale(4.2)';
+        orb.style.opacity = '0';
+        setTimeout(() => orb.remove(), 520);
+      }, 20);
+    }
+
+    if (attack === 'groundCrack') {
+      const crack = document.createElement('div');
+      crack.style.position = 'fixed';
+      crack.style.left = '50%';
+      crack.style.top = '52%';
+      crack.style.width = '210px';
+      crack.style.height = '6px';
+      crack.style.background = 'linear-gradient(90deg, transparent, rgba(132, 60, 30, 0.85), transparent)';
+      crack.style.transform = 'translate(-50%, -50%) rotate(12deg)';
+      crack.style.opacity = '0.9';
+      crack.style.borderRadius = '999px';
+      crack.style.zIndex = '18';
+      crack.style.pointerEvents = 'none';
+      document.body.appendChild(crack);
+
+      setTimeout(() => {
+        crack.style.transition = 'opacity 500ms ease-out';
+        crack.style.opacity = '0';
+        setTimeout(() => crack.remove(), 500);
+      }, 120);
+    }
+
+    if (player && player.x && player.y) {
+      const dist = Math.abs(player.x - boss.x) + Math.abs(player.y - boss.y);
+      if (dist < 260) {
+        player.hp = Math.max(0, player.hp - (attack === 'orbBurst' ? 18 : 12));
+      }
+    }
+
+    if (window.__audio?.arenaTransition) {
+      window.__audio.arenaTransition();
+    }
+
+    triggerCinematicBeat(msg);
+  };
+
+  const bossLoop = () => {
+    const boss = window.__game?.boss;
+    if (boss && performance.now() > bossAttackState.nextAttackAt) {
+      bossAttackState.nextAttackAt = performance.now() + 2200;
+      applyBossAttack();
+    }
+    requestAnimationFrame(bossLoop);
+  };
+
+  bossLoop();
+})();
