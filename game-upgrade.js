@@ -13,7 +13,7 @@ const upgradeConfig = {
 };
 
 (function () {
-  const state = { ready: false, ghosts: [], lastGhost: 0 };
+  const state = { ready: false, ghosts: [], lastGhost: 0, arenaLocked: false, lastBossPhase: null, lastVibe: 0, shakeTimer: 0, hitFlash: 0, lowHpPulse: 0 };
 
   function getGame() {
     return window.__game || null;
@@ -58,6 +58,24 @@ const upgradeConfig = {
     }
   }
 
+  function addShockwavePulse() {
+    const pulse = document.createElement('div');
+    pulse.style.position = 'fixed';
+    pulse.style.inset = '0';
+    pulse.style.pointerEvents = 'none';
+    pulse.style.background = 'radial-gradient(circle, rgba(255,190,80,0.22) 0%, rgba(255,102,0,0.12) 30%, rgba(0,0,0,0) 60%)';
+    pulse.style.opacity = '1';
+    pulse.style.transition = 'opacity 260ms ease';
+    pulse.style.zIndex = '25';
+    pulse.style.mixBlendMode = 'screen';
+    document.body.appendChild(pulse);
+
+    requestAnimationFrame(() => {
+      pulse.style.opacity = '0';
+      setTimeout(() => pulse.remove(), 320);
+    });
+  }
+
   function triggerDash() {
     const P = getPlayer();
     if (!P || P.dashCd > 0) return;
@@ -68,6 +86,7 @@ const upgradeConfig = {
     P.vx = P.face * 720;
     P.vy = 0;
     if (P.c) P.c.alpha = 0.8;
+    addShockwavePulse();
   }
 
   function addAfterimage() {
@@ -79,7 +98,7 @@ const upgradeConfig = {
     state.lastGhost = now;
 
     const ghost = P.c.clone({ children: true });
-    ghost.alpha = 0.2;
+    ghost.alpha = 0.18;
     ghost.scale.x = P.face * (0.9 + (P.dashT * 2));
     ghost.scale.y = 0.9 + (P.dashT * 2);
 
@@ -94,7 +113,7 @@ const upgradeConfig = {
     for (let i = state.ghosts.length - 1; i >= 0; i--) {
       const item = state.ghosts[i];
       item.life -= 0.016;
-      item.sprite.alpha *= 0.8;
+      item.sprite.alpha *= 0.82;
       if (item.life <= 0) {
         if (item.sprite.parent) item.sprite.parent.removeChild(item.sprite);
         state.ghosts.splice(i, 1);
@@ -120,6 +139,7 @@ const upgradeConfig = {
           enemy.dead = true;
           if (enemy.c && enemy.c.destroy) enemy.c.destroy({ children: true });
         }
+        addShockwavePulse();
       }
     }
   }
@@ -182,6 +202,92 @@ const upgradeConfig = {
     }
   }
 
+  function ensureVFXLayer() {
+    let layer = document.getElementById('brutal-vfx');
+    if (layer) return layer;
+
+    layer = document.createElement('div');
+    layer.id = 'brutal-vfx';
+    layer.style.position = 'fixed';
+    layer.style.inset = '0';
+    layer.style.pointerEvents = 'none';
+    layer.style.zIndex = '30';
+    layer.style.opacity = '0';
+    layer.style.transition = 'opacity 160ms ease';
+    layer.style.background = 'radial-gradient(circle at center, rgba(255,128,32,0.18), rgba(0,0,0,0) 55%)';
+    document.body.appendChild(layer);
+    return layer;
+  }
+
+  function triggerHitFlash() {
+    const layer = ensureVFXLayer();
+    layer.style.opacity = '1';
+    setTimeout(() => { layer.style.opacity = '0'; }, 120);
+  }
+
+  function triggerScreenShake() {
+    const canvas = document.querySelector('canvas');
+    if (!canvas) return;
+    canvas.style.transform = 'translate3d(' + ((Math.random() - 0.5) * 12) + 'px,' + ((Math.random() - 0.5) * 12) + 'px,0)';
+    clearTimeout(state.shakeTimer);
+    state.shakeTimer = setTimeout(() => {
+      canvas.style.transform = '';
+    }, 120);
+  }
+
+  function updateBossPhase() {
+    const boss = getGame()?.boss;
+    if (!boss || !boss.hp) return;
+
+    let phase = 1;
+    if (boss.hp < boss.max * 0.66) phase = 2;
+    if (boss.hp < boss.max * 0.33) phase = 3;
+
+    if (state.lastBossPhase !== phase) {
+      state.lastBossPhase = phase;
+      const msg = document.getElementById('msg');
+      if (msg) {
+        msg.textContent = phase === 1 ? 'Pán výhne' : phase === 2 ? 'Pán výhne zúri' : 'Pán výhne je rozzuřený';
+        msg.style.opacity = '1';
+        setTimeout(() => { if (msg) msg.style.opacity = '0'; }, 1200);
+      }
+      triggerScreenShake();
+      triggerHitFlash();
+      addShockwavePulse();
+    }
+  }
+
+  function updateArenaLock() {
+    const game = getGame();
+    if (!game || !game.P) return;
+    const P = game.P;
+    if (P.x > 3850 && !state.arenaLocked) {
+      state.arenaLocked = true;
+      const msg = document.getElementById('msg');
+      if (msg) {
+        msg.textContent = 'Arena seal';
+        msg.style.opacity = '1';
+        setTimeout(() => { if (msg) msg.style.opacity = '0'; }, 1200);
+      }
+    }
+  }
+
+  function updateLowHpVignette() {
+    const P = getPlayer();
+    if (!P) return;
+
+    const layer = ensureVFXLayer();
+    if (P.hp < 25) {
+      state.lowHpPulse += 0.06;
+      const pulse = 0.4 + Math.sin(state.lowHpPulse) * 0.24;
+      layer.style.background = 'radial-gradient(circle at center, rgba(255,40,40,0.18), rgba(255,0,0,0.10) 28%, rgba(0,0,0,0) 58%)';
+      layer.style.opacity = String(Math.min(1, 0.28 + pulse));
+    } else {
+      layer.style.opacity = '0';
+      layer.style.background = 'radial-gradient(circle at center, rgba(255,128,32,0.18), rgba(0,0,0,0) 55%)';
+    }
+  }
+
   function tickUpgrade() {
     const game = getGame();
     const P = getPlayer();
@@ -193,6 +299,9 @@ const upgradeConfig = {
 
     updateGhosts();
     updateHud();
+    updateLowHpVignette();
+    updateArenaLock();
+    updateBossPhase();
 
     const enemies = Array.isArray(game.enemies) ? game.enemies : [];
     enemies.forEach(applyStagger);
