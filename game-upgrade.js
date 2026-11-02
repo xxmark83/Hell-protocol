@@ -190,6 +190,48 @@ const upgradeConfig = {
     }
   };
 
+  const spawnEnemyDeathVfx = (enemy) => {
+    const layer = document.getElementById('enemy-vfx-layer') || (() => {
+      const el = document.createElement('div');
+      el.id = 'enemy-vfx-layer';
+      el.style.position = 'fixed';
+      el.style.inset = '0';
+      el.style.pointerEvents = 'none';
+      el.style.zIndex = '29';
+      el.style.overflow = 'hidden';
+      document.body.appendChild(el);
+      return el;
+    })();
+
+    const colorA = '#ff7a18';
+    const colorB = '#650b0b';
+    const count = 14;
+    for (let i = 0; i < count; i++) {
+      const shard = document.createElement('span');
+      const x = enemy.x + (Math.random() - 0.5) * 35;
+      const y = enemy.y + (Math.random() - 0.5) * 35;
+      const size = Math.random() * 8 + 4;
+      shard.style.position = 'absolute';
+      shard.style.left = `${x}px`;
+      shard.style.top = `${y}px`;
+      shard.style.width = `${size}px`;
+      shard.style.height = `${size * 1.7}px`;
+      shard.style.background = `linear-gradient(180deg, ${colorA}, ${colorB})`;
+      shard.style.borderRadius = '50%';
+      shard.style.transform = `rotate(${Math.random() * 180}deg)`;
+      shard.style.opacity = '0.85';
+      shard.style.filter = 'blur(0.2px)';
+      layer.appendChild(shard);
+
+      setTimeout(() => {
+        shard.style.transition = 'transform 420ms ease-out, opacity 420ms ease-out';
+        shard.style.transform = `translate(${(Math.random() - 0.5) * 90}px, ${(Math.random() - 0.5) * 90}px) rotate(${Math.random() * 360}deg)`;
+        shard.style.opacity = '0';
+        setTimeout(() => shard.remove(), 440);
+      }, 20);
+    }
+  };
+
   const applyStagger = (enemy) => {
     if (!enemy || enemy.dead) return;
 
@@ -219,6 +261,7 @@ const upgradeConfig = {
     const distanceY = Math.abs(P.y - enemy.y);
     if (distanceX < 80 && distanceY < 80) {
       enemy.dead = true;
+      spawnEnemyDeathVfx(enemy);
       if (enemy.c) {
         enemy.c.visible = false;
         if (enemy.c.destroy) enemy.c.destroy({ children: true });
@@ -292,7 +335,6 @@ const upgradeConfig = {
     if (!P || !game) return;
 
     if (P.dashT > 0) addAfterimage();
-
     updateGhosts();
     updateHud();
     updateBossPhase();
@@ -450,13 +492,18 @@ const upgradeConfig = {
     source.buffer = buffer;
     source.loop = true;
 
+    const lowpass = ctx.createBiquadFilter();
+    lowpass.type = 'lowpass';
+    lowpass.frequency.value = 1800;
+
     const gain = ctx.createGain();
     gain.gain.value = gainValue;
 
-    source.connect(gain);
+    source.connect(lowpass);
+    lowpass.connect(gain);
     gain.connect(ctx.destination);
     source.start();
-    return { source, gain };
+    return { source, gain, lowpass };
   };
 
   const createTone = (ctx, freq = 52, gainValue = 0.018, type = 'sawtooth') => {
@@ -464,14 +511,19 @@ const upgradeConfig = {
     osc.type = type;
     osc.frequency.value = freq;
 
+    const lowpass = ctx.createBiquadFilter();
+    lowpass.type = 'lowpass';
+    lowpass.frequency.value = 1200;
+
     const gain = ctx.createGain();
     gain.gain.value = gainValue;
 
-    osc.connect(gain);
+    osc.connect(lowpass);
+    lowpass.connect(gain);
     gain.connect(ctx.destination);
     osc.start();
 
-    return { osc, gain };
+    return { osc, gain, lowpass };
   };
 
   const initAudio = () => {
@@ -479,7 +531,7 @@ const upgradeConfig = {
     const ctx = ensureAudioContext();
     if (!ctx) return;
 
-    audioState.ambient = createNoise(ctx, 0.008);
+    audioState.ambient = createNoise(ctx, 0.006);
     audioState.music = createTone(ctx, 48, 0.012, 'sawtooth');
     audioState.started = true;
   };
@@ -493,10 +545,15 @@ const upgradeConfig = {
     osc.type = 'sawtooth';
     osc.frequency.value = 90 * pitch;
 
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 2200;
+
     const gain = ctx.createGain();
     gain.gain.value = 0.12;
 
-    osc.connect(gain);
+    osc.connect(filter);
+    filter.connect(gain);
     gain.connect(ctx.destination);
     osc.start();
     gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.12);
@@ -512,10 +569,15 @@ const upgradeConfig = {
     osc.type = 'square';
     osc.frequency.value = 42;
 
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 1800;
+
     const gain = ctx.createGain();
     gain.gain.value = 0.18;
 
-    osc.connect(gain);
+    osc.connect(filter);
+    filter.connect(gain);
     gain.connect(ctx.destination);
     osc.start();
     gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.08);
@@ -531,10 +593,15 @@ const upgradeConfig = {
     osc.type = 'triangle';
     osc.frequency.value = 140;
 
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'highpass';
+    filter.frequency.value = 250;
+
     const gain = ctx.createGain();
     gain.gain.value = 0.06;
 
-    osc.connect(gain);
+    osc.connect(filter);
+    filter.connect(gain);
     gain.connect(ctx.destination);
     osc.start();
     gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.1);
@@ -640,4 +707,119 @@ const upgradeConfig = {
       spawnBloodBurst(x, y, 8);
     }
   }, 1600);
+})();
+
+(() => {
+  const ensureAmbientDust = () => {
+    let layer = document.getElementById('arena-dust');
+    if (layer) return layer;
+
+    layer = document.createElement('div');
+    layer.id = 'arena-dust';
+    layer.style.position = 'fixed';
+    layer.style.inset = '0';
+    layer.style.pointerEvents = 'none';
+    layer.style.zIndex = '15';
+    layer.style.opacity = '0.25';
+    layer.style.background = 'radial-gradient(circle, rgba(255,170,110,0.12), transparent 50%)';
+    layer.style.filter = 'blur(18px)';
+    document.body.appendChild(layer);
+    return layer;
+  };
+
+  const spawnDustParticle = () => {
+    const layer = ensureAmbientDust();
+    const dot = document.createElement('span');
+    const x = Math.random() * window.innerWidth;
+    const y = Math.random() * window.innerHeight;
+    dot.style.position = 'absolute';
+    dot.style.left = `${x}px`;
+    dot.style.top = `${y}px`;
+    dot.style.width = `${Math.random() * 4 + 2}px`;
+    dot.style.height = dot.style.width;
+    dot.style.borderRadius = '50%';
+    dot.style.background = 'rgba(255,180,120,0.22)';
+    dot.style.filter = 'blur(1px)';
+    layer.appendChild(dot);
+
+    setTimeout(() => {
+      dot.style.transition = 'transform 2800ms ease-out, opacity 2800ms ease-out';
+      dot.style.transform = `translate(${(Math.random() - 0.5) * 180}px, ${(Math.random() - 0.5) * 120}px)`;
+      dot.style.opacity = '0';
+      setTimeout(() => dot.remove(), 2900);
+    }, 10);
+  };
+
+  setInterval(() => {
+    if (Math.random() > 0.18) spawnDustParticle();
+  }, 250);
+})();
+
+(() => {
+  const bossFXState = { pulse: 0, lastBurst: 0 };
+
+  const ensureBossAura = () => {
+    let aura = document.getElementById('boss-aura');
+    if (aura) return aura;
+
+    aura = document.createElement('div');
+    aura.id = 'boss-aura';
+    aura.style.position = 'fixed';
+    aura.style.inset = '0';
+    aura.style.pointerEvents = 'none';
+    aura.style.zIndex = '18';
+    aura.style.opacity = '0';
+    aura.style.background = 'radial-gradient(circle at center, rgba(255,90,50,0.18), rgba(120,20,0,0.12) 28%, transparent 62%)';
+    aura.style.mixBlendMode = 'screen';
+    document.body.appendChild(aura);
+    return aura;
+  };
+
+  const spawnBossImpact = (x, y) => {
+    const layer = ensureBossAura();
+    const ring = document.createElement('div');
+    ring.style.position = 'absolute';
+    ring.style.left = `${x}px`;
+    ring.style.top = `${y}px`;
+    ring.style.width = '60px';
+    ring.style.height = '60px';
+    ring.style.border = '2px solid rgba(255,150,80,0.55)';
+    ring.style.borderRadius = '50%';
+    ring.style.transform = 'translate(-50%, -50%)';
+    ring.style.opacity = '0.8';
+    layer.appendChild(ring);
+
+    setTimeout(() => {
+      ring.style.transition = 'transform 420ms ease-out, opacity 420ms ease-out';
+      ring.style.transform = 'translate(-50%, -50%) scale(3.5)';
+      ring.style.opacity = '0';
+      setTimeout(() => ring.remove(), 420);
+    }, 10);
+  };
+
+  const updateBossChoreography = () => {
+    const boss = window.__game?.boss;
+    if (!boss || !boss.c) return;
+
+    const phase = boss.hp / Math.max(1, boss.max);
+    const aura = ensureBossAura();
+    const pulse = 0.14 + (1 - phase) * 0.6 + Math.sin(performance.now() * 0.005) * 0.08;
+    aura.style.opacity = String(Math.min(1, pulse));
+    aura.style.background = `radial-gradient(circle at center, rgba(255,90,50,${0.14 + (1 - phase) * 0.4}), rgba(120,20,0,0.12) 28%, transparent 62%)`;
+
+    boss.c.rotation = Math.sin(performance.now() * 0.006) * (phase < 0.35 ? 0.2 : 0.1);
+    boss.c.alpha = 0.75 + Math.sin(performance.now() * 0.04) * 0.25;
+
+    if (boss.hp < boss.max * 0.7 && performance.now() - bossFXState.lastBurst > 1200) {
+      bossFXState.lastBurst = performance.now();
+      const x = window.innerWidth * 0.5 + (Math.random() - 0.5) * 260;
+      const y = window.innerHeight * 0.45 + (Math.random() - 0.5) * 160;
+      spawnBossImpact(x, y);
+    }
+  };
+
+  requestAnimationFrame(function frame() {
+    updateBossChoreography();
+    requestAnimationFrame(frame);
+  });
 })();
