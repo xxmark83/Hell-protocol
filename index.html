@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="sk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Mortal Bullet · hodinky</title>
+<style>
+:root{--bg:#0b0706;--ink:#eadfcd;--mute:#9a8c7c;--bronze:#d9a15a;--red:#ff4a24;--case:#1b1a1d;--case2:#3a383d}
+*{box-sizing:border-box}
+html,body{margin:0;background:radial-gradient(ellipse at 50% 30%,#22130f,#0b0706 70%);color:var(--ink);font:15px/1.45 -apple-system,system-ui,Segoe UI,Roboto,sans-serif;min-height:100%}
+body{display:flex;flex-wrap:wrap;gap:48px;justify-content:center;align-items:flex-start;padding:24px 16px 40px}
+h1{font-size:20px;letter-spacing:.08em;margin:0 0 4px;color:var(--bronze)}
+.panel{max-width:340px;flex:1 1 300px}
+.panel p{color:var(--mute);margin:.3em 0 1em}
+label{display:block;margin:.6em 0 .2em;color:var(--mute);font-size:13px}
+select,button{font:inherit;background:#1d1513;color:var(--ink);border:1px solid #4a3426;border-radius:8px;padding:6px 10px;width:100%}
+button{cursor:pointer;margin-top:10px}
+button:hover,select:hover{border-color:var(--bronze)}
+.row{display:flex;gap:8px}.row>*{flex:1}
+table{border-collapse:collapse;width:100%;margin-top:14px;font-size:13px}
+td{padding:4px 6px;border-top:1px solid #2c201b;vertical-align:top}
+td:first-child{color:var(--bronze);white-space:nowrap}
+.stage{display:flex;flex-direction:column;align-items:center;gap:12px}
+/* hodinky */
+.watch{position:relative;padding:var(--bez);border-radius:calc(var(--r) + var(--bez));background:linear-gradient(145deg,var(--case2),var(--case) 40%,#0e0d0f);box-shadow:0 30px 60px #000a,inset 0 1px 2px #fff3,inset 0 -2px 4px #0008;touch-action:none;user-select:none}
+.watch.ultra{background:linear-gradient(145deg,#8d8a83,#5b5852 45%,#3c3a36);border-radius:calc(var(--r)*.82 + var(--bez))}
+.glass{position:relative;border-radius:var(--r);overflow:hidden;background:#000;box-shadow:0 0 0 2px #000}
+.watch.ultra .glass{border-radius:calc(var(--r)*.82)}
+canvas#scr{display:block;width:100%;height:100%;image-rendering:auto}
+.crown{position:absolute;right:calc(var(--bez)*-1 - 10px);top:22%;width:16px;height:46px;border-radius:5px;background:repeating-linear-gradient(0deg,#5a565d 0 2px,#2b292e 2px 4px);background-size:100% 8px;box-shadow:inset 0 0 3px #000,2px 2px 6px #0008;cursor:ns-resize}
+.watch.ultra .crown{background:repeating-linear-gradient(0deg,#b9b4aa 0 2px,#6d6961 2px 4px);background-size:100% 8px;width:18px}
+.watch.ultra .crown::after{content:'';position:absolute;left:3px;right:3px;top:-12px;height:8px;border-radius:3px;background:#77736b}
+.side{position:absolute;right:calc(var(--bez)*-1 - 6px);top:48%;width:8px;height:58px;border-radius:4px;background:linear-gradient(90deg,#2d2b30,#46434a);box-shadow:2px 2px 6px #0008}
+.watch.ultra .side{background:linear-gradient(90deg,#77736b,#9a958c)}
+.watch.ultra .action{position:absolute;left:calc(var(--bez)*-1 - 6px);top:30%;width:8px;height:48px;border-radius:4px;background:#ff6a10;box-shadow:-2px 2px 6px #0008}
+.cap{color:var(--mute);font-size:12px;text-align:center}
+kbd{background:#2a1d18;border:1px solid #4a3426;border-radius:4px;padding:0 4px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="watch" id="watch">
+    <div class="glass" id="glass"><canvas id="scr"></canvas></div>
+    <div class="crown" id="crown" title="Digitálna korunka: koliesko myši alebo ťahaj hore a dole"></div>
+    <div class="side"></div><div class="action"></div>
+  </div>
+  <div class="cap" id="cap"></div>
+</div>
+<div class="panel">
+  <h1>MORTAL BULLET · HODINKY</h1>
+  <p>Prototyp 2D hry pre Apple Watch v prehliadači. Ukazuje veľkosť obrazu, čitateľnosť a ovládanie korunkou a dotykom. Rýchlosť skutočných hodiniek neukáže; merač vpravo hore ráta, koľko by sa kreslilo.</p>
+  <label for="model">Hodinky (rozlíšenie približne)</label>
+  <select id="model">
+    <option value="374x446">Series 10 / 11 · 42 mm · 374 × 446</option>
+    <option value="416x496" selected>Series 10 / 11 · 46 mm · 416 × 496</option>
+    <option value="410x502">Ultra 2 · 49 mm · 410 × 502</option>
+    <option value="422x514">Ultra 3 · 49 mm · 422 × 514</option>
+  </select>
+  <div class="row">
+    <div><label for="zoom">Veľkosť na obrazovke</label>
+      <select id="zoom"><option value="1">skutočné body</option><option value="1.5">1,5 ×</option><option value="2" selected>2 ×</option></select></div>
+    <div><label for="q">Kvalita</label>
+      <select id="q"><option value="w" selected>hodinky (šetrná)</option><option value="f">plná</option></select></div>
+  </div>
+  <div class="row">
+    <div><label for="fps">Snímky</label>
+      <select id="fps"><option value="60" selected>60 / s</option><option value="30">30 / s (šetrenie batérie)</option></select></div>
+    <div><label for="perf">Merač</label>
+      <select id="perf"><option value="1" selected>zapnutý</option><option value="0">vypnutý</option></select></div>
+  </div>
+  <button id="restart">Nová hra</button>
+  <table>
+    <tr><td>Korunka</td><td>pohyb doľava a doprava · koliesko myši nad hodinkami, ťahanie korunky, alebo <kbd>←</kbd> <kbd>→</kbd></td></tr>
+    <tr><td>Ťuknutie</td><td>výstrel na najbližšieho démona (mieri samo) · <kbd>medzerník</kbd></td></tr>
+    <tr><td>Podržanie</td><td>štít; zdvihnutý tesne pred zásahom = presný kryt (zelenú strelu vráti, útočníka omráči) · <kbd>Shift</kbd></td></tr>
+    <tr><td>Švih do strany</td><td>úskok · <kbd>A</kbd> <kbd>D</kbd></td></tr>
+    <tr><td>Švih hore</td><td>nápor štítom · <kbd>W</kbd></td></tr>
+  </table>
+</div>
+<script src="skull.js"></script>
+<script src="watch.js"></script>
+</body>
+</html>
